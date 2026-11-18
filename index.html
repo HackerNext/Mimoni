@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0B0D12" id="themeColorMeta">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MiMoni">
+  <title>MiMoni — Money Tracker</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <link rel="stylesheet" href="./styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <!-- Top Header with Clean Symmetrical Sliders Settings Icon -->
+    <header class="top-bar">
+      <div class="brand-row">
+        <div class="brand-logo" aria-hidden="true">M</div>
+        <div>
+          <h1 class="brand-title">MiMoni</h1>
+          <p class="brand-subtitle" id="activeProfileLabel">Main Profile</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="reconcileOpenBtn" class="icon-pill-btn tactile-btn" type="button" title="Reconcile Balance" aria-label="Reconcile Balance">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          <span>Reconcile</span>
+        </button>
+        <button id="settingsOpenBtn" class="icon-btn tactile-btn" type="button" title="Settings" aria-label="Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="4" y1="6" x2="20" y2="6"/>
+            <line x1="4" y1="12" x2="20" y2="12"/>
+            <line x1="4" y1="18" x2="20" y2="18"/>
+            <circle cx="9" cy="6" r="2.3" fill="var(--bg-card)"/>
+            <circle cx="15" cy="12" r="2.3" fill="var(--bg-card)"/>
+            <circle cx="9" cy="18" r="2.3" fill="var(--bg-card)"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="setupPromptBanner" class="setup-banner hidden">
+      <div class="setup-banner-text">
+        <strong>Starting balance not configured</strong>
+        <span>Tap to set your initial Bank/Cash balance anytime.</span>
+      </div>
+      <button type="button" id="openSetupFromBannerBtn" class="setup-banner-btn tactile-btn">Set Up Now</button>
+    </div>
+
+    <!-- VIEW 1: LEDGER (HOME) -->
+    <div id="homePageView" class="page-view">
+      <section class="hero-card" aria-label="Current Running Balance">
+        <div class="hero-top-row">
+          <span class="hero-label" id="heroBalanceLabel">CURRENT RUNNING BALANCE</span>
+          <span class="pocket-filter-group" id="pocketSelector">
+            <button type="button" class="pocket-chip active" data-pocket="ALL">All</button>
+            <button type="button" class="pocket-chip" data-pocket="BANK">Bank</button>
+            <button type="button" class="pocket-chip" data-pocket="CASH">Cash</button>
+          </span>
+        </div>
+        <div class="balance-display-wrap">
+          <span id="currencySymbolHero" class="hero-currency">₹</span>
+          <span id="rollingBalanceValue" class="hero-balance-number">0.00</span>
+        </div>
+        <div class="hero-metrics-grid">
+          <div class="metric-pill income">
+            <span class="metric-label">Received (+)</span>
+            <span id="totalInflowText" class="metric-val">+₹0.00</span>
+          </div>
+          <div class="metric-pill expense">
+            <span class="metric-label">Spent (-)</span>
+            <span id="totalOutflowText" class="metric-val">-₹0.00</span>
+          </div>
+        </div>
+        <div class="pocket-split-bar" id="pocketBreakdownRow">
+          <span>Bank: <strong id="bankBalanceText">₹0.00</strong></span>
+          <span class="dot-divider">•</span>
+          <span>Cash: <strong id="cashBalanceText">₹0.00</strong></span>
+          <button type="button" id="editStartingBalInlineBtn" class="inline-link-btn">Edit Start Bal</button>
+        </div>
+      </section>
+
+      <section class="filter-strip">
+        <div class="search-box">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input type="search" id="searchInput" placeholder="Search note, tag, or amount..." autocomplete="off">
+        </div>
+      </section>
+
+      <main class="timeline-container" id="timelineContainer">
+        <div id="emptyStateBox" class="empty-state">
+          <div class="empty-orb">₹</div>
+          <h2>Your Ledger is Empty</h2>
+          <p>Tap <strong>+</strong> below to log expenses, or <strong>Scan</strong> to extract payment screenshots offline.</p>
+        </div>
+        <div id="transactionsList" class="transactions-list"></div>
+      </main>
+    </div>
+
+    <!-- VIEW 2: PLANNED EXPENSES -->
+    <div id="plannedPageView" class="page-view hidden">
+      <section class="hero-card" aria-label="Planned Expenses Budget">
+        <div class="hero-top-row">
+          <span class="hero-label">FUTURE / PLANNED EXPENSES</span>
+        </div>
+        <div class="hero-metrics-grid" style="margin-top:10px;">
+          <div class="metric-pill" style="background: var(--bg-oled); border: 1px solid var(--border-subtle);">
+            <span class="metric-label">Total Actual Balance</span>
+            <span id="plannedTotalBalanceText" class="metric-val" style="color:var(--text-primary);">₹0.00</span>
+          </div>
+          <div class="metric-pill expense">
+            <span class="metric-label">Reserved (Planned)</span>
+            <span id="plannedReservedText" class="metric-val">-₹0.00</span>
+          </div>
+        </div>
+        <div class="pocket-split-bar" style="justify-content: space-between; padding-bottom: 4px;">
+          <span style="font-size:0.8rem;">Safe to Spend:</span>
+          <strong id="plannedAvailableText" style="color:var(--mint-add); font-size:1.1rem;">₹0.00</strong>
+        </div>
+      </section>
+
+      <section class="filter-strip" style="display:flex; justify-content: space-between; align-items: center;">
+        <h3 style="font-size:0.9rem; margin-left:4px;">Upcoming Plans</h3>
+        <button type="button" id="openPlanSheetBtn" class="primary-submit-btn tactile-btn" style="width:auto; padding:8px 14px; font-size:0.8rem; border-radius:12px;">+ Plan Expense</button>
+      </section>
+
+      <main class="timeline-container" id="plannedTimelineContainer">
+        <div id="plannedEmptyStateBox" class="empty-state">
+          <div class="empty-orb" style="background:var(--bg-elevated); color:var(--text-secondary);">📅</div>
+          <h2>No Planned Expenses</h2>
+          <p>Reserve money for future bills or goals here. Planned amounts cannot exceed your total actual balance.</p>
+        </div>
+        <div id="plannedList" class="transactions-list"></div>
+      </main>
+    </div>
+
+    <!-- VIEW 3: TAGS & GROUPS -->
+    <div id="tagsPageView" class="page-view hidden">
+      <section class="tags-page-header">
+        <div class="tags-header-top">
+          <div>
+            <h2>All Tags & Groups</h2>
+            <p>Group repeating tags into folders. Tap any transaction for full details.</p>
+          </div>
+          <span id="totalTagsCountBadge" class="tag-summary-pill">0 Tags</span>
+        </div>
+        <div class="search-box" style="margin-top:8px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input type="search" id="tagPageSearchInput" placeholder="Filter unlimited tags or transactions..." autocomplete="off">
+        </div>
+      </section>
+
+      <div id="tagGroupingPromptBanner" class="grouping-banner hidden" style="margin:0 14px 10px;">
+        <div class="grouping-banner-info">
+          <span class="grouping-dot">●</span>
+          <span id="groupingPromptText">Group multiple tags?</span>
+        </div>
+        <div class="grouping-banner-actions">
+          <button type="button" id="confirmGroupTagBtn" class="group-confirm-btn tactile-btn">Group</button>
+          <button type="button" id="dismissGroupTagBtn" class="group-dismiss-btn">Later</button>
+        </div>
+      </div>
+
+      <main class="tags-scroll-viewport" id="tagsScrollViewport">
+        <div id="unmergedTagsSuggestionBox" class="unmerged-suggestion-list"></div>
+        <div id="tagsGroupsContainer" class="tags-groups-container"></div>
+      </main>
+    </div>
+
+    <!-- Undo Toast Bar -->
+    <div id="undoToast" class="undo-toast" role="status" aria-live="polite">
+      <span id="undoToastText">Action successful</span>
+      <button id="undoActionBtn" type="button" class="undo-btn">UNDO</button>
+    </div>
+
+    <!-- BOTTOM NAVIGATION BAR -->
+    <nav class="bottom-nav-bar" aria-label="Bottom Navigation">
+      <button type="button" id="navHomeBtn" class="bottom-nav-item active tactile-btn" data-view="HOME" aria-label="Ledger">
+        <div class="nav-icon-wrap"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="17" y2="13"/><line x1="7" y1="17" x2="12" y2="17"/></svg></div>
+        <span class="nav-label">Ledger</span>
+      </button>
+
+      <button type="button" id="navPlannedBtn" class="bottom-nav-item tactile-btn" data-view="PLANNED" aria-label="Planned">
+        <div class="nav-icon-wrap"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+        <span class="nav-label">Planned</span>
+      </button>
+
+      <button type="button" id="openQuickLogBtn" class="bottom-nav-fab tactile-btn" aria-label="Quick Log Transaction">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+
+      <label for="ocrFileInput" class="bottom-nav-item tactile-btn" aria-label="Scan Screenshot">
+        <div class="nav-icon-wrap"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>
+        <span class="nav-label">Scan</span>
+      </label>
+      <input type="file" id="ocrFileInput" accept="image/*" multiple hidden>
+
+      <button type="button" id="navTagsBtn" class="bottom-nav-item tactile-btn" data-view="TAGS" aria-label="Tags">
+        <div class="nav-icon-wrap">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+          <span id="ungroupedBadge" class="nav-badge-dot hidden">!</span>
+        </div>
+        <span class="nav-label">Tags</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ONBOARDING MODAL -->
+  <div id="onboardingModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="onboarding-card">
+      <div class="modal-top-bar">
+        <span class="onboard-badge">STARTING BALANCE SETUP</span>
+        <button type="button" id="closeOnboardingModalBtn" class="sheet-close-btn">✕</button>
+      </div>
+      <h2 id="onboardTitle">Set Your Starting Balance</h2>
+      <p class="onboard-desc">Enter your current balance so every transaction adds or subtracts accurately.</p>
+      
+      <form id="onboardingForm">
+        <div class="form-row-responsive">
+          <div class="input-group currency-col">
+            <label>Currency</label>
+            <select id="onboardCurrency">
+              <option value="₹" selected>₹ (INR)</option>
+              <option value="$">$ (USD)</option>
+              <option value="€">€ (EUR)</option>
+              <option value="£">£ (GBP)</option>
+            </select>
+          </div>
+          <div class="input-group balance-col">
+            <label>Total Starting Balance</label>
+            <input type="number" id="onboardTotalBalance" step="0.01" placeholder="0.00" required>
+          </div>
+        </div>
+        <div class="split-toggle-row">
+          <input type="checkbox" id="enablePocketSplitToggle">
+          <label for="enablePocketSplitToggle">Split into Bank vs Cash</label>
+        </div>
+        <div id="pocketSplitInputs" class="form-row-responsive hidden">
+          <div class="input-group"><label>Bank Balance</label><input type="number" id="onboardBankPart" step="0.01" placeholder="0.00"></div>
+          <div class="input-group"><label>Cash in Hand</label><input type="number" id="onboardCashPart" step="0.01" placeholder="0.00"></div>
+        </div>
+        <div class="onboard-actions-stack">
+          <button type="submit" class="primary-submit-btn tactile-btn">Save Balance & Start</button>
+          <button type="button" id="skipOnboardingBtn" class="secondary-skip-btn tactile-btn">Skip for Now</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- QUICK-LOG ACTUAL EXPENSE SHEET -->
+  <div id="quickLogSheetBackdrop" class="sheet-backdrop hidden" aria-hidden="true">
+    <div class="bottom-sheet" id="quickLogSheet">
+      <div class="sheet-handle-bar"></div>
+      <div class="sheet-top-controls">
+        <div class="type-pill-switch">
+          <button type="button" id="typeDeductBtn" class="type-pill deduct active" data-type="DEDUCT">Spent (−)</button>
+          <button type="button" id="typeAddBtn" class="type-pill add" data-type="ADD">Received (+)</button>
+        </div>
+        <div class="mini-pocket-switch" id="sheetPocketSwitch">
+          <button type="button" class="mini-pocket-btn active" data-pocket="BANK">Bank</button>
+          <button type="button" class="mini-pocket-btn" data-pocket="CASH">Cash</button>
+        </div>
+        <button type="button" id="closeQuickLogBtn" class="sheet-close-btn">✕</button>
+      </div>
+
+      <div id="editingModeBanner" class="editing-mode-banner hidden">
+        <span>✎ Editing Existing Transaction</span>
+        <button type="button" id="cancelEditModeBtn" class="inline-link-btn">Cancel</button>
+      </div>
+
+      <div class="amount-math-display">
+        <div class="math-expr-row">
+          <span id="sheetCurrencySign" class="sheet-currency">₹</span>
+          <span id="mathExpressionText" class="math-expr-text">0</span>
+        </div>
+        <div id="mathEvaluatedPreview" class="math-eval-badge">= ₹0.00</div>
+      </div>
+
+      <div class="tag-input-bar">
+        <span id="currentTagColorSwatch" class="tag-color-dot"></span>
+        <input type="text" id="tagInputField" placeholder="Name Tag (e.g. Tea, Fuel)..." maxlength="36" autocomplete="off">
+        <button type="button" id="shuffleTagColorBtn" class="shuffle-color-btn tactile-btn">Color</button>
+      </div>
+
+      <div id="savedTagChipsRow" class="saved-tags-strip"></div>
+
+      <div class="note-date-grid">
+        <input type="text" id="noteInputField" placeholder="Additional note..." maxlength="120" autocomplete="off">
+        <input type="datetime-local" id="dateInputField">
+      </div>
+
+      <div class="live-balance-preview">
+        <span class="prev-bal-label">Running Bal:</span>
+        <span id="livePrevBalText">₹0.00</span>
+        <span class="arrow-sep">→</span>
+        <strong id="liveNewBalText" class="new-bal-highlight">₹0.00</strong>
+      </div>
+
+      <div class="math-keypad" id="mathKeypad">
+        <button type="button" class="key-btn" data-key="7">7</button><button type="button" class="key-btn" data-key="8">8</button><button type="button" class="key-btn" data-key="9">9</button><button type="button" class="key-btn op" data-key="/">÷</button>
+        <button type="button" class="key-btn" data-key="4">4</button><button type="button" class="key-btn" data-key="5">5</button><button type="button" class="key-btn" data-key="6">6</button><button type="button" class="key-btn op" data-key="*">×</button>
+        <button type="button" class="key-btn" data-key="1">1</button><button type="button" class="key-btn" data-key="2">2</button><button type="button" class="key-btn" data-key="3">3</button><button type="button" class="key-btn op" data-key="-">−</button>
+        <button type="button" class="key-btn" data-key=".">.</button><button type="button" class="key-btn" data-key="0">0</button><button type="button" class="key-btn back" data-key="BACK">⌫</button><button type="button" class="key-btn op" data-key="+">+</button>
+      </div>
+
+      <div class="sheet-bottom-actions">
+        <button type="button" id="clearMathBtn" class="clear-key-btn tactile-btn">AC</button>
+        <button type="button" id="saveTransactionBtn" class="save-entry-btn deduct-mode tactile-btn">Save Entry</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PLAN FUTURE EXPENSE SHEET -->
+  <div id="planExpenseSheetBackdrop" class="sheet-backdrop hidden" aria-hidden="true">
+    <div class="bottom-sheet" id="planExpenseSheet">
+      <div class="sheet-handle-bar"></div>
+      <div class="sheet-top-controls">
+        <h2 style="font-size:1.1rem;">Plan Future Expense</h2>
+        <button type="button" id="closePlanSheetBtn" class="sheet-close-btn">✕</button>
+      </div>
+      
+      <p style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:10px;">Reserve money from your actual balance. You cannot plan more than you have.</p>
+
+      <div class="amount-math-display">
+        <div class="math-expr-row">
+          <span id="planSheetCurrencySign" class="sheet-currency">₹</span>
+          <span id="planMathExpressionText" class="math-expr-text">0</span>
+        </div>
+        <div id="planMathEvaluatedPreview" class="math-eval-badge">= ₹0.00</div>
+      </div>
+
+      <div class="tag-input-bar">
+        <span id="planTagColorSwatch" class="tag-color-dot"></span>
+        <input type="text" id="planTagInputField" placeholder="Expense Name/Tag..." maxlength="36" autocomplete="off">
+        <button type="button" id="planShuffleColorBtn" class="shuffle-color-btn tactile-btn">Color</button>
+      </div>
+
+      <input type="text" id="planNoteInputField" placeholder="Additional note..." maxlength="120" autocomplete="off" style="width:100%; background:var(--bg-oled); border:1px solid var(--border-subtle); padding:10px; border-radius:12px; margin-bottom:10px; color:var(--text-primary); outline:none;">
+
+      <div class="live-balance-preview">
+        <span class="prev-bal-label">Safe to Spend:</span>
+        <span id="planLiveAvailableText">₹0.00</span>
+      </div>
+
+      <div class="math-keypad" id="planMathKeypad">
+        <button type="button" class="key-btn" data-key="7">7</button><button type="button" class="key-btn" data-key="8">8</button><button type="button" class="key-btn" data-key="9">9</button><button type="button" class="key-btn op" data-key="/">÷</button>
+        <button type="button" class="key-btn" data-key="4">4</button><button type="button" class="key-btn" data-key="5">5</button><button type="button" class="key-btn" data-key="6">6</button><button type="button" class="key-btn op" data-key="*">×</button>
+        <button type="button" class="key-btn" data-key="1">1</button><button type="button" class="key-btn" data-key="2">2</button><button type="button" class="key-btn" data-key="3">3</button><button type="button" class="key-btn op" data-key="-">−</button>
+        <button type="button" class="key-btn" data-key=".">.</button><button type="button" class="key-btn" data-key="0">0</button><button type="button" class="key-btn back" data-key="BACK">⌫</button><button type="button" class="key-btn op" data-key="+">+</button>
+      </div>
+
+      <div class="sheet-bottom-actions">
+        <button type="button" id="planClearMathBtn" class="clear-key-btn tactile-btn">AC</button>
+        <button type="button" id="savePlannedBtn" class="save-entry-btn tactile-btn" style="background:#70A1FF; color:#0A1326;">Save Plan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- POST PLANNED TO LEDGER SHEET -->
+  <div id="postToLedgerModalBackdrop" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="onboarding-card">
+      <div class="modal-top-bar">
+        <h2>Post to Ledger</h2>
+        <button type="button" id="closePostLedgerBtn" class="sheet-close-btn">✕</button>
+      </div>
+      <p class="onboard-desc">You are converting this planned expense into an actual spent transaction. Pick the date and pocket.</p>
+      <form id="postToLedgerForm">
+        <div class="input-group">
+          <label>Pocket Paid From</label>
+          <select id="postLedgerPocket">
+            <option value="BANK" selected>Bank</option>
+            <option value="CASH">Cash</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label>Date of Transaction</label>
+          <input type="datetime-local" id="postLedgerDate" required>
+        </div>
+        <button type="submit" class="primary-submit-btn tactile-btn" style="background:var(--coral-deduct); color:#1B0408;">Confirm Deduction</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- FULL DETAILS MODAL -->
+  <div id="txDetailModalBackdrop" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="onboarding-card tx-detail-card">
+      <div class="modal-top-bar">
+        <span id="txDetailTypeBadge" class="onboard-badge">DETAILS</span>
+        <button type="button" id="closeTxDetailModalBtn" class="sheet-close-btn">✕</button>
+      </div>
+      <div class="tx-detail-hero">
+        <div id="txDetailAvatar" class="tx-detail-avatar">T</div>
+        <div>
+          <h2 id="txDetailModalTitle">Tag Name</h2>
+          <div id="txDetailAmountBig" class="tx-detail-amount">-₹0.00</div>
+        </div>
+      </div>
+      <div class="tx-detail-info-list" id="txDetailInfoList"></div>
+      
+      <div id="txDetailReceiptSection" class="tx-detail-receipt-wrap hidden">
+        <span class="detail-label">Attached Screenshot Proof</span>
+        <img id="txDetailReceiptImg" class="receipt-proof-img" alt="Receipt Screenshot">
+        <details class="raw-ocr-collapsible">
+          <summary>View Extracted Receipt Text</summary>
+          <p id="txDetailRawOcrText" class="receipt-ocr-dump"></p>
+        </details>
+      </div>
+
+      <div class="tx-detail-actions-row">
+        <button type="button" id="editTxFromDetailBtn" class="primary-submit-btn tactile-btn" style="background:var(--bg-elevated); border:1px solid var(--border-subtle); color:var(--text-primary);">✎ Edit</button>
+        <button type="button" id="deleteTxFromDetailBtn" class="danger-btn tactile-btn">Delete</button>
+      </div>
+      <div id="plannedActionsRow" class="hidden" style="margin-top:10px;">
+        <button type="button" id="postPlannedToLedgerBtn" class="primary-submit-btn tactile-btn" style="background:#70A1FF; color:#0A1326; width:100%;">Post to Actual Ledger</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OCR REVIEW DRAWER -->
+  <div id="ocrDrawerBackdrop" class="sheet-backdrop hidden" aria-hidden="true">
+    <div class="bottom-sheet large-sheet" id="ocrReviewDrawer">
+      <div class="sheet-handle-bar"></div>
+      <div class="drawer-header">
+        <div>
+          <h2>Screenshot Scanner</h2>
+          <p id="ocrStatusSubtitle">Preprocessing screenshot...</p>
+        </div>
+        <button type="button" id="closeOcrDrawerBtn" class="sheet-close-btn">✕</button>
+      </div>
+      <div id="ocrProgressWrap" class="ocr-progress-wrap">
+        <div class="ocr-progress-bar"><div id="ocrProgressFill" class="ocr-progress-fill" style="width: 10%;"></div></div>
+        <span id="ocrProgressPct">10%</span>
+      </div>
+      
+      <details id="ocrRawInspectorBox" class="raw-ocr-collapsible" style="margin-bottom:10px;">
+        <summary>Inspect Raw Scanned Text & Image</summary>
+        <div id="ocrInspectorContent" class="receipt-ocr-dump"></div>
+      </details>
+
+      <div id="ocrExtractedList" class="ocr-extracted-list"></div>
+      <div class="drawer-footer-stack">
+        <button type="button" id="addManualOcrRowBtn" class="secondary-action-btn tactile-btn" style="width:100%;margin-bottom:8px;">+ Add Missing Row</button>
+        <button type="button" id="commitOcrItemsBtn" class="primary-submit-btn tactile-btn">Save Selected to Balance</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECONCILE BALANCE MODAL -->
+  <div id="reconcileModalBackdrop" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="onboarding-card">
+      <div class="modal-top-bar">
+        <h2>Reconcile Actual Balance</h2>
+        <button type="button" id="closeReconcileModalBtn" class="sheet-close-btn">✕</button>
+      </div>
+      <form id="reconcileForm">
+        <div class="input-group">
+          <select id="reconcilePocketSelect"><option value="BANK">Bank Pocket</option><option value="CASH">Cash Pocket</option></select>
+        </div>
+        <div class="input-group">
+          <input type="number" id="reconcileActualInput" step="0.01" placeholder="Enter exact balance" required>
+        </div>
+        <div id="reconcileDiffPreview" class="reconcile-diff-preview">Difference: ₹0.00</div>
+        <button type="submit" class="primary-submit-btn tactile-btn">Auto-Log Difference</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- OVERHAULED SETTINGS MODAL (Clean Header, Day/Night Switch, Modern Renamable Profiles) -->
+  <div id="settingsModalBackdrop" class="sheet-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="bottom-sheet large-sheet settings-sheet">
+      <div class="sheet-handle-bar"></div>
+      <div class="drawer-header">
+        <div>
+          <h2>Settings & Profiles</h2>
+          <p>Customize appearance, active profile, and backups</p>
+        </div>
+        <button type="button" id="closeSettingsModalBtn" class="sheet-close-btn" aria-label="Close Settings">✕</button>
+      </div>
+
+      <div class="settings-scroll-body">
+        <!-- 1. Day / Night Segmented Pill Switch -->
+        <div class="settings-section theme-row-card">
+          <div class="settings-card-info">
+            <h3>Appearance</h3>
+            <p>Switch between Day and Night mode</p>
+          </div>
+          <div class="day-night-switch" role="radiogroup" aria-label="Theme Mode">
+            <button type="button" id="themeDayBtn" class="dn-pill tactile-btn" data-theme="light">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+              <span>Day</span>
+            </button>
+            <button type="button" id="themeNightBtn" class="dn-pill active tactile-btn" data-theme="dark">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+              <span>Night</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. Modern User Profiles Hub (Renamable + Interactive Cards) -->
+        <div class="settings-section profiles-hub-card">
+          <div class="profiles-hub-top">
+            <div>
+              <h3>User Profiles</h3>
+              <p>Tap a profile to switch, or rename the active profile</p>
+            </div>
+            <span id="profileCountBadge" class="tag-summary-pill">1 Profile</span>
+          </div>
+
+          <!-- Active Profile Inline Rename Bar -->
+          <div class="profile-rename-bar">
+            <div id="activeProfileAvatarSettings" class="profile-avatar-badge">M</div>
+            <input type="text" id="renameProfileInput" placeholder="Active profile name..." maxlength="28" autocomplete="off">
+            <button type="button" id="saveProfileNameBtn" class="profile-save-name-btn tactile-btn">Rename</button>
+          </div>
+
+          <!-- Interactive Profile Cards List -->
+          <div id="profilesCardsGrid" class="profiles-cards-grid"></div>
+
+          <!-- Create New Profile Inline Bar -->
+          <div class="new-profile-inline-row">
+            <input type="text" id="newProfileNameInput" placeholder="New profile name (e.g. Furqan, Home)..." maxlength="28" autocomplete="off">
+            <button type="button" id="createNewProfileBtn" class="new-profile-add-btn tactile-btn">+ Add Profile</button>
+          </div>
+        </div>
+
+        <!-- 3. Starting Balance Setup -->
+        <div class="settings-section">
+          <h3>Starting Balance & Pockets</h3>
+          <p>Update your initial Bank/Cash balance or currency symbol.</p>
+          <button type="button" id="reopenOnboardingFromSettingsBtn" class="secondary-action-btn tactile-btn">Configure Starting Balance</button>
+        </div>
+        
+        <!-- 4. Offline JSON Backup & Restore -->
+        <div class="settings-section">
+          <h3>Offline JSON Backup & Restore</h3>
+          <p>Export your local ledger to a JSON file or restore from backup.</p>
+          <div class="btn-row">
+            <button type="button" id="exportJsonBtn" class="secondary-action-btn tactile-btn">⬇ Export Backup</button>
+            <label for="importJsonInput" class="secondary-action-btn tactile-btn">⬆ Import Backup</label>
+            <input type="file" id="importJsonInput" accept="application/json" hidden>
+          </div>
+        </div>
+
+        <!-- 5. Reset Current Profile -->
+        <div class="settings-section danger-zone">
+          <h3>Reset Active Profile</h3>
+          <p>Wipe all transactions and planned expenses for the currently active profile.</p>
+          <button type="button" id="factoryResetBtn" class="danger-btn tactile-btn">Wipe Active Profile</button>
+        </div>
+
+        <div class="settings-version-footer">
+          MiMoni v7.0 • 100% Offline PWA Engine
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(err => console.warn(err));
+      });
+    }
+  </script>
+</body>
+</html>
